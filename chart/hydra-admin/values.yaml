@@ -14,11 +14,16 @@ replicaCount: 2
 nameOverride: ""
 fullnameOverride: ""
 
-# ─── Hydra Connection ───────────────────────────────────────────────────────
+# ─── Hydra Servers ──────────────────────────────────────────────────────────
 
 hydra:
-  # K8s service URL for Hydra admin API
-  adminURL: "http://hydra.ory.svc.cluster.local:4445"
+  # List of Hydra admin servers
+  servers:
+    - name: prod
+      label: Production
+      environment: prod
+      url: "http://hydra.ory.svc.cluster.local:4445"
+      description: "Primary production Hydra"
 
 # ─── Authentication ─────────────────────────────────────────────────────────
 

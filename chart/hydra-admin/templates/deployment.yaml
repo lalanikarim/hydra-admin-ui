@@ -35,8 +35,8 @@ spec:
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
-            - name: HYDRA_ADMIN_URL
-              value: {{ .Values.hydra.adminURL | quote }}
+            - name: HYDRA_SERVERS
+              value: {{ toJson .Values.hydra.servers | quote }}
             - name: PORT
               value: {{ .Values.service.targetPort | quote }}
             - name: NODE_ENV
