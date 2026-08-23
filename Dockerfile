@@ -4,12 +4,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install frontend dependencies
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Install server dependencies
-COPY server/package.json ./server/
+# Install server dependencies (includes dev for TypeScript)
+COPY server/package.json server/package-lock.json* ./server/
 RUN cd server && npm ci
 
 # Copy source
@@ -17,6 +17,9 @@ COPY . .
 
 # Build frontend
 RUN npm run build
+
+# Build server (TypeScript → JS)
+RUN cd server && npm run build
 
 # ─── Production Stage ─────────────────────────────────────────────────────
 
@@ -27,11 +30,10 @@ WORKDIR /app
 # Copy built frontend
 COPY --from=builder /app/dist ./dist
 
-# Copy server
-COPY --from=builder /app/server ./server
-
-# Install production dependencies only
-RUN cd server && npm ci --only=production
+# Copy compiled server + production deps
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/server/package.json ./server/
+RUN cd server && npm ci --omit=dev
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -44,5 +46,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
-# Start server
-CMD ["node", "server/index.js"]
+# Start server (compiled TypeScript)
+CMD ["node", "server/dist/index.js"]

@@ -161,6 +161,7 @@ export class AppRoot extends LitElement {
         { pattern: /^\/clients\/([^/]+)\/edit\/*$/, name: 'page-client-edit', hasParams: true },
         { pattern: /^\/tokens\/*$/, name: 'page-tokens', hasParams: false },
         { pattern: /^\/settings\/*$/, name: 'page-settings', hasParams: false },
+        { pattern: /^\/login\/*$/, name: 'page-login', hasParams: false },
       ];
 
       for (const route of routes) {
@@ -180,6 +181,21 @@ export class AppRoot extends LitElement {
       const cleaned = hash.startsWith('#') ? hash.slice(1) : hash;
       const path = cleaned || '/';
       this.currentPath = path;
+
+      // Auth guard: redirect to login if not authenticated (except on login page)
+      if (path !== '/login') {
+        try {
+          const authRes = await fetch('/api/auth', { credentials: 'same-origin' });
+          const authData = await authRes.json();
+          if (!authData.authenticated) {
+            window.location.hash = '#/login';
+            return;
+          }
+        } catch {
+          // If auth check fails (network error), allow through
+          // The server will still protect API routes
+        }
+      }
 
       // Clean up previous page element
       if (this.page && this.page.remove) {

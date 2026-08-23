@@ -2,13 +2,21 @@
   "name": "hydra-admin-server",
   "version": "1.0.0",
   "private": true,
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "NODE_ENV=development node index.js"
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "NODE_ENV=development tsx index.ts"
   },
   "dependencies": {
     "express": "^4.21.0",
-    "http-proxy-middleware": "^3.0.0"
+    "otplib": "^13.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
   }
 }

@@ -27,6 +27,18 @@ spec:
               value: "3001"
             - name: NODE_ENV
               value: "production"
+            - name: SESSION_HOURS
+              value: "8"
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hydra-admin-auth
+                  key: admin-token
+            - name: ADMIN_TOTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hydra-admin-auth
+                  key: totp-secret
           livenessProbe:
             httpGet:
               path: /health

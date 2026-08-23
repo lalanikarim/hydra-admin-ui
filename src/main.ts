@@ -24,6 +24,7 @@ import './pages/client-edit.js';
 import './pages/client-view.js';
 import './pages/tokens.js';
 import './pages/settings.js';
+import './pages/login.js';
 
 // Ensure toast container exists in DOM
 const toastRoot = document.createElement('hydra-toast-root');
