@@ -14,12 +14,13 @@
  *   SESSION_HOURS      - Session TTL in hours (default: 8)
  */
 
+import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { verifySync, generateSync } from 'otplib';
+import { verifySync } from 'otplib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -246,7 +247,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  // API routes → 401 JSON
+  // API + proxy routes → 401 JSON (frontend handles redirect)
   if (
     req.path.startsWith('/api/') ||
     req.path.startsWith('/clients') ||
@@ -256,8 +257,8 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  // Static/SPA → redirect to login
-  res.redirect('/#/login');
+  // Static files + SPA → serve HTML, frontend redirects to #/login
+  next();
 }
 
 app.use(requireAuth);
@@ -334,7 +335,10 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // ─── Static Files ───────────────────────────────────────────────────────────
 
-const distPath = path.resolve(__dirname, '../dist');
+// In dev (tsx): __dirname = server/ → ../dist
+// In prod (compiled): __dirname = server/dist/ → ../../dist
+const isCompiled = __dirname.endsWith('dist');
+const distPath = path.resolve(__dirname, isCompiled ? '../../dist' : '../dist');
 app.use(express.static(distPath));
 
 // SPA fallback

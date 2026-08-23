@@ -10,12 +10,14 @@
     "dev": "NODE_ENV=development tsx index.ts"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^4.21.0",
     "otplib": "^13.5.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
+    "qrcode": "^1.5.4",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }
