@@ -1,0 +1,23 @@
+{
+  "name": "hydra-admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3001",
+    "build": "tsc --noEmit && vite build",
+    "build:server": "cd server && npm install",
+    "build:all": "npm run build && npm run build:server",
+    "start": "node server/index.js",
+    "preview": "vite preview --port 3001",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lit": "^3.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "@types/node": "^22.0.0"
+  }
+}
