@@ -15,7 +15,7 @@ RUN cd server && npm ci
 # Source
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
-COPY server/index.ts server/tsconfig.json ./server/
+COPY server/*.ts server/tsconfig.json ./server/
 
 # Build frontend → /app/dist
 RUN npm run build
