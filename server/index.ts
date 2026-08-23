@@ -2,16 +2,18 @@
  * Hydra Admin Server (TypeScript)
  *
  * - Serves the static frontend
- * - Proxies API requests to Hydra admin
+ * - Proxies API requests to one or more Hydra admin instances
  * - Auth: shared ADMIN_TOKEN + TOTP 2FA
+ * - Audit log: in-memory ring buffer
  *
  * Env vars:
- *   HYDRA_ADMIN_URL    - Hydra admin service URL
- *   PORT               - Server port (default: 3001)
- *   NODE_ENV           - 'production' | 'development'
- *   ADMIN_TOKEN        - Shared admin token (required)
- *   ADMIN_TOTP_SECRET  - TOTP base32 secret (required)
- *   SESSION_HOURS      - Session TTL in hours (default: 8)
+ *   HYDRA_SERVERS     - JSON array of server configs (multi-server)
+ *   HYDRA_ADMIN_URL   - Single Hydra URL (legacy, = one server "default")
+ *   PORT              - Server port (default: 3001)
+ *   NODE_ENV          - 'production' | 'development'
+ *   ADMIN_TOKEN       - Shared admin token (required)
+ *   ADMIN_TOTP_SECRET - TOTP base32 secret (required)
+ *   SESSION_HOURS     - Session TTL in hours (default: 8)
  */
 
 import 'dotenv/config';
@@ -21,6 +23,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { verifySync } from 'otplib';
+import { listServers, getServer, validateServerName } from './servers.js';
+import { logAudit, getAudit } from './audit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +32,6 @@ const __dirname = path.dirname(__filename);
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
-const HYDRA_ADMIN_URL = process.env.HYDRA_ADMIN_URL || 'http://localhost:4445';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const ADMIN_TOTP_SECRET = process.env.ADMIN_TOTP_SECRET || '';
 const SESSION_HOURS = parseInt(process.env.SESSION_HOURS || '8', 10);
@@ -75,7 +78,6 @@ function destroySession(token: string | undefined): void {
   if (token) sessions.delete(token);
 }
 
-// Periodic cleanup
 setInterval(() => {
   const now = Date.now();
   for (const [token, session] of sessions) {
@@ -146,7 +148,6 @@ const log = (...args: unknown[]) => {
 
 const app = express();
 
-// Parse JSON for /api routes
 app.use('/api', express.json());
 
 // Security headers
@@ -165,7 +166,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// ─── Auth Routes (before middleware) ────────────────────────────────────────
+// ─── Auth Routes ────────────────────────────────────────────────────────────
 
 app.post('/api/login', (req: Request, res: Response) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
@@ -227,6 +228,73 @@ app.get('/api/auth', (req: Request, res: Response) => {
   res.json({ authenticated: valid });
 });
 
+// ─── Server Registry API ────────────────────────────────────────────────────
+
+app.get('/api/servers', (_req: Request, res: Response) => {
+  res.json({ servers: listServers() });
+});
+
+app.post('/api/servers/:name/health', async (req: Request, res: Response) => {
+  const name = String(req.params.name);
+
+  if (!validateServerName(name)) {
+    res.status(404).json({ message: `Unknown server: ${name}` });
+    return;
+  }
+
+  const server = getServer(name)!;
+  const start = performance.now();
+
+  try {
+    const result = await new Promise<{ status: number; latency: number }>((resolve, reject) => {
+      const url = new URL(server.url);
+      const req = http.request(
+        {
+          hostname: url.hostname,
+          port: url.port,
+          path: '/',
+          method: 'GET',
+          timeout: 5000,
+        },
+        (proxyRes) => {
+          const latency = Math.round(performance.now() - start);
+          proxyRes.resume(); // drain
+          resolve({ status: proxyRes.statusCode || 500, latency });
+        }
+      );
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('timeout'));
+      });
+      req.end();
+    });
+
+    res.json({
+      name,
+      ok: result.status >= 200 && result.status < 400,
+      status: result.status,
+      latency: result.latency,
+    });
+  } catch (err) {
+    const latency = Math.round(performance.now() - start);
+    res.json({
+      name,
+      ok: false,
+      status: 0,
+      latency,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+});
+
+// ─── Audit Log API ──────────────────────────────────────────────────────────
+
+app.get('/api/audit', (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 500);
+  res.json({ entries: getAudit(limit) });
+});
+
 // ─── Auth Middleware ────────────────────────────────────────────────────────
 
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
@@ -235,6 +303,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     req.path === '/api/login' ||
     req.path === '/api/logout' ||
     req.path === '/api/auth' ||
+    req.path === '/api/servers' ||
     req.path === '/health'
   ) {
     next();
@@ -247,9 +316,10 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  // API + proxy routes → 401 JSON (frontend handles redirect)
+  // API + proxy routes → 401
   if (
     req.path.startsWith('/api/') ||
+    req.path.startsWith('/h/') ||
     req.path.startsWith('/clients') ||
     req.path.startsWith('/oauth2')
   ) {
@@ -257,18 +327,29 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  // Static files + SPA → serve HTML, frontend redirects to #/login
+  // Static/SPA → serve HTML
   next();
 }
 
 app.use(requireAuth);
 
-// ─── Proxy to Hydra ─────────────────────────────────────────────────────────
+// ─── Proxy to Hydra (multi-server) ──────────────────────────────────────────
 
-async function proxyToHydra(req: Request, res: Response): Promise<void> {
+// New routes: /h/{serverName}/clients* and /h/{serverName}/oauth2*
+app.all('/h/:serverName/clients*', async (req: Request, res: Response) => {
+  const serverName = String(req.params.serverName);
+
+  if (!validateServerName(serverName)) {
+    res.status(404).json({ message: `Unknown server: ${serverName}` });
+    return;
+  }
+
+  const server = getServer(serverName)!;
+  const targetUrl = new URL(req.url.replace(`/h/${serverName}`, ''), server.url);
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
   try {
     const body = await collectBody(req);
-    const targetUrl = new URL(req.url, HYDRA_ADMIN_URL);
 
     const options: http.RequestOptions = {
       hostname: targetUrl.hostname,
@@ -283,24 +364,36 @@ async function proxyToHydra(req: Request, res: Response): Promise<void> {
       timeout: 30000,
     };
 
-    log(`[Proxy] ${req.method} ${targetUrl.host}${options.path}`);
+    log(`[Proxy] ${req.method} ${serverName} → ${targetUrl.host}${options.path}`);
 
     const proxyReq = http.request(options, (proxyRes) => {
-      log(`[Proxy] Response: ${proxyRes.statusCode}`);
-      res.status(proxyRes.statusCode || 502);
+      const status = proxyRes.statusCode || 502;
+      log(`[Proxy] Response: ${status}`);
+
+      // Audit log
+      logAudit({
+        server: serverName,
+        method: req.method || 'GET',
+        path: req.url.replace(`/h/${serverName}`, '') || '/',
+        status,
+        ip,
+      });
+
+      res.status(status);
       proxyRes?.pipe(res);
     });
 
     proxyReq.on('error', (err) => {
-      console.error('[Proxy] Error:', err.message);
+      console.error(`[Proxy] Error (${serverName}):`, err.message);
+      logAudit({ server: serverName, method: req.method || 'GET', path: req.url || '/', status: 502, ip });
       if (!res.headersSent) {
         res.status(502).json({ message: 'Proxy error', error: err.message });
       }
     });
 
     proxyReq.on('timeout', () => {
-      console.error('[Proxy] Timeout after 30s');
       proxyReq.destroy();
+      logAudit({ server: serverName, method: req.method || 'GET', path: req.url || '/', status: 504, ip });
       if (!res.headersSent) {
         res.status(504).json({ message: 'Proxy timeout' });
       }
@@ -310,15 +403,101 @@ async function proxyToHydra(req: Request, res: Response): Promise<void> {
     proxyReq.end();
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[Proxy] Error:', msg);
+    console.error(`[Proxy] Error (${serverName}):`, msg);
     if (!res.headersSent) {
       res.status(500).json({ message: 'Internal error', error: msg });
     }
   }
-}
+});
 
-app.all('/clients*', proxyToHydra);
-app.all('/oauth2*', proxyToHydra);
+app.all('/h/:serverName/oauth2*', async (req: Request, res: Response) => {
+  const serverName = String(req.params.serverName);
+
+  if (!validateServerName(serverName)) {
+    res.status(404).json({ message: `Unknown server: ${serverName}` });
+    return;
+  }
+
+  const server = getServer(serverName)!;
+  const targetUrl = new URL(req.url.replace(`/h/${serverName}`, ''), server.url);
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+  try {
+    const body = await collectBody(req);
+
+    const options: http.RequestOptions = {
+      hostname: targetUrl.hostname,
+      port: targetUrl.port,
+      path: targetUrl.pathname + targetUrl.search,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: targetUrl.host,
+        'content-length': body.length,
+      },
+      timeout: 30000,
+    };
+
+    log(`[Proxy] ${req.method} ${serverName} → ${targetUrl.host}${options.path}`);
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      const status = proxyRes.statusCode || 502;
+      log(`[Proxy] Response: ${status}`);
+      logAudit({
+        server: serverName,
+        method: req.method || 'GET',
+        path: req.url.replace(`/h/${serverName}`, '') || '/',
+        status,
+        ip,
+      });
+      res.status(status);
+      proxyRes?.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error(`[Proxy] Error (${serverName}):`, err.message);
+      logAudit({ server: serverName, method: req.method || 'GET', path: req.url || '/', status: 502, ip });
+      if (!res.headersSent) {
+        res.status(502).json({ message: 'Proxy error', error: err.message });
+      }
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      logAudit({ server: serverName, method: req.method || 'GET', path: req.url || '/', status: 504, ip });
+      if (!res.headersSent) {
+        res.status(504).json({ message: 'Proxy timeout' });
+      }
+    });
+
+    if (body.length > 0) proxyReq.write(body);
+    proxyReq.end();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Internal error', error: msg });
+    }
+  }
+});
+
+// Legacy routes: /clients* and /oauth2* (single server backward compat)
+app.all(['/clients*', '/oauth2*'], (req: Request, res: Response) => {
+  const servers = listServers();
+  if (servers.length === 1) {
+    // Single server: rewrite URL and re-dispatch
+    const name = servers[0].name;
+    const originalUrl = req.url;
+    req.url = `/h/${name}${originalUrl}`;
+    (app as any)._router.handle(req, res, () => {
+      res.status(404).json({ message: 'Not found' });
+    });
+    return;
+  }
+  res.status(400).json({
+    message: 'Multiple servers configured. Use /h/{serverName}/clients or /h/{serverName}/oauth2.',
+    servers: servers.map((s) => s.name),
+  });
+});
 
 // ─── Health Check ───────────────────────────────────────────────────────────
 
@@ -326,7 +505,7 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    hydraAdmin: HYDRA_ADMIN_URL,
+    servers: listServers().map((s) => ({ name: s.name, url: s.url })),
     nodeVersion: process.version,
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.0',
@@ -335,16 +514,14 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // ─── Static Files ───────────────────────────────────────────────────────────
 
-// In dev (tsx): __dirname = server/ → ../dist
-// In prod (compiled): __dirname = server/dist/ → ../../dist
 const isCompiled = __dirname.endsWith('dist');
 const distPath = path.resolve(__dirname, isCompiled ? '../../dist' : '../dist');
 app.use(express.static(distPath));
 
-// SPA fallback
 app.get('*', (req: Request, res: Response) => {
   if (
     req.path.startsWith('/api') ||
+    req.path.startsWith('/h/') ||
     req.path.startsWith('/clients') ||
     req.path.startsWith('/oauth2')
   ) {
@@ -366,8 +543,12 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ─── Start ──────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
+  const serverList = listServers();
   console.log(`🦅 Hydra Admin Server running on port ${PORT}`);
-  console.log(`📡 Proxying to Hydra admin: ${HYDRA_ADMIN_URL}`);
+  console.log(`📡 Configured servers (${serverList.length}):`);
+  for (const s of serverList) {
+    console.log(`   • ${s.name} (${s.environment}): ${s.url}`);
+  }
   console.log(`🔐 Auth: ADMIN_TOKEN + TOTP (session: ${SESSION_HOURS}h)`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
