@@ -129,7 +129,7 @@ export async function listServers(): Promise<HydraServer[]> {
   return data.servers;
 }
 
-export async function checkServerHealth(name: string): Promise<{ ok: boolean; status: number; latency: number; error?: string }> {
+export async function checkServerHealth(name: string): Promise<{ name: string; ok: boolean; status: number; latency: number; error?: string }> {
   return fetchJson(`/api/servers/${encodeURIComponent(name)}/health`, { method: 'POST' });
 }
 

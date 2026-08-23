@@ -1,15 +1,13 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { listServers } from '../api/hydra.js';
-import { showSuccess, showError } from '../components/common/toast.js';
+import { listServers, checkServerHealth, getAuditLog, type HydraServer, type AuditEntry } from '../api/hydra.js';
 
-interface HealthInfo {
-  status: string;
-  timestamp: string;
-  hydraAdmin: string;
-  nodeVersion: string;
-  environment: string;
-  version: string;
+interface HealthResult {
+  name: string;
+  ok: boolean;
+  status: number;
+  latency: number;
+  error?: string;
 }
 
 @customElement('page-settings')
@@ -24,13 +22,12 @@ export class SettingsPage extends LitElement {
       display: flex;
       align-items: center;
       gap: 16px;
-      margin-bottom: 24px;
+      margin-bottom: var(--spacing-lg, 24px);
     }
 
     .page-header h1 {
       margin: 0;
       flex: 1;
-      font-size: 1.5rem;
     }
 
     .back-link {
@@ -39,33 +36,124 @@ export class SettingsPage extends LitElement {
       font-size: 0.875rem;
       padding: 6px 12px;
       border: 1px solid var(--color-border, #dee2e6);
-      border-radius: 6px;
+      border-radius: var(--radius-md, 8px);
       transition: all 0.15s ease;
     }
 
     .back-link:hover {
       background: var(--color-bg-secondary, #f8f9fa);
       color: var(--color-text, #212529);
+      text-decoration: none;
     }
 
     .card {
       background: var(--color-surface, #fff);
       border: 1px solid var(--color-border, #dee2e6);
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 20px;
+      border-radius: var(--radius-lg, 12px);
+      padding: var(--spacing-lg, 24px);
+      margin-bottom: var(--spacing-md, 16px);
     }
 
     .card h2 {
-      margin: 0 0 16px;
-      font-size: 1rem;
+      margin: 0 0 var(--spacing-md, 16px);
+      font-size: 0.875rem;
       font-weight: 600;
       color: var(--color-text-secondary, #6c757d);
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
 
-    .row {
+    .server-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--color-border-light, #e9ecef);
+    }
+
+    .server-row:last-child {
+      border-bottom: none;
+    }
+
+    .env-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .env-dot.prod { background: #dc3545; }
+    .env-dot.staging { background: #ffc107; }
+    .env-dot.dev { background: #0dcaf0; }
+    .env-dot.unknown { background: #adb5bd; }
+
+    .server-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .server-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--color-text, #212529);
+    }
+
+    .server-url {
+      font-size: 0.75rem;
+      color: var(--color-text-muted, #adb5bd);
+      font-family: var(--font-mono, monospace);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .health-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+
+    .health-badge.ok {
+      background: var(--color-success-light, #d1e7dd);
+      color: var(--color-success, #198754);
+    }
+
+    .health-badge.fail {
+      background: var(--color-danger-light, #f8d7da);
+      color: var(--color-danger, #dc3545);
+    }
+
+    .health-badge.pending {
+      background: var(--color-bg-secondary, #f8f9fa);
+      color: var(--color-text-muted, #adb5bd);
+    }
+
+    .btn-check {
+      padding: 8px 16px;
+      background: var(--color-surface, #fff);
+      color: var(--color-text, #212529);
+      border: 1.5px solid var(--color-border, #dee2e6);
+      border-radius: var(--radius-md, 8px);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-check:hover {
+      background: var(--color-bg-secondary, #f8f9fa);
+      border-color: #b0b7c1;
+    }
+
+    .btn-check:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .info-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -73,45 +161,24 @@ export class SettingsPage extends LitElement {
       border-bottom: 1px solid var(--color-border-light, #e9ecef);
     }
 
-    .row:last-child {
+    .info-row:last-child {
       border-bottom: none;
     }
 
-    .row .label {
+    .info-row .label {
       font-size: 0.875rem;
       color: var(--color-text-secondary, #6c757d);
     }
 
-    .row .value {
+    .info-row .value {
       font-size: 0.875rem;
       color: var(--color-text, #212529);
       font-weight: 500;
     }
 
-    .row .value.mono {
+    .info-row .value.mono {
       font-family: var(--font-mono, monospace);
       font-size: 0.8125rem;
-    }
-
-    .status-indicator {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--color-success, #198754);
-    }
-
-    .status-dot.error {
-      background: var(--color-danger, #dc3545);
-    }
-
-    .status-dot.pending {
-      background: var(--color-warning, #ffc107);
     }
 
     .badge {
@@ -123,72 +190,71 @@ export class SettingsPage extends LitElement {
     }
 
     .badge-dev {
-      background: #fff3cd;
+      background: var(--color-warning-light, #fff3cd);
       color: #664d03;
     }
 
     .badge-prod {
-      background: #d1e7dd;
+      background: var(--color-success-light, #d1e7dd);
       color: #0f5132;
     }
 
-    .btn-refresh {
-      padding: 8px 16px;
-      background: var(--color-surface, #fff);
-      color: var(--color-text, #212529);
-      border: 1.5px solid var(--color-border, #dee2e6);
-      border-radius: 8px;
+    /* Audit table */
+    .audit-table {
+      width: 100%;
+      border-collapse: collapse;
       font-size: 0.8125rem;
+    }
+
+    .audit-table th {
+      text-align: left;
+      padding: 8px 10px;
       font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .btn-refresh:hover {
-      background: var(--color-bg-secondary, #f8f9fa);
-      border-color: #b0b7c1;
-    }
-
-    .btn-refresh:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .links-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-    }
-
-    .link-card {
-      display: block;
-      padding: 14px 16px;
-      background: var(--color-bg-secondary, #f8f9fa);
-      border: 1px solid var(--color-border-light, #e9ecef);
-      border-radius: 8px;
-      text-decoration: none;
-      color: var(--color-text, #212529);
-      transition: all 0.15s ease;
-    }
-
-    .link-card:hover {
-      border-color: var(--color-primary, #0d6efd);
-      background: var(--color-primary-light, #e7f1ff);
-    }
-
-    .link-card .link-label {
-      font-size: 0.875rem;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-
-    .link-card .link-url {
-      font-size: 0.75rem;
       color: var(--color-text-muted, #adb5bd);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      border-bottom: 1px solid var(--color-border, #dee2e6);
+    }
+
+    .audit-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--color-border-light, #e9ecef);
+      color: var(--color-text, #212529);
+    }
+
+    .audit-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .audit-table .method {
       font-family: var(--font-mono, monospace);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .audit-table .method.GET { color: var(--color-success, #198754); }
+    .audit-table .method.POST { color: var(--color-primary, #0d6efd); }
+    .audit-table .method.PUT { color: #e0a800; }
+    .audit-table .method.DELETE { color: var(--color-danger, #dc3545); }
+
+    .audit-table .status-ok { color: var(--color-success, #198754); }
+    .audit-table .status-err { color: var(--color-danger, #dc3545); }
+
+    .audit-table .path {
+      font-family: var(--font-mono, monospace);
+      font-size: 0.75rem;
+      max-width: 200px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .empty-audit {
+      text-align: center;
+      padding: 24px;
+      color: var(--color-text-muted, #adb5bd);
+      font-size: 0.875rem;
     }
 
     .loading {
@@ -215,19 +281,24 @@ export class SettingsPage extends LitElement {
   `;
 
   @state()
-  private health: HealthInfo | null = null;
+  private servers: HydraServer[] = [];
 
   @state()
-  private clientCount: number | null = null;
+  private health: Map<string, HealthResult> = new Map();
 
   @state()
-  private latency: number | null = null;
+  private checking = false;
+
+  @state()
+  private audit: AuditEntry[] = [];
 
   @state()
   private loading = true;
 
   @state()
-  private error: string | null = null;
+  private nodeVersion = '';
+  @state()
+  private environment = '';
 
   connectedCallback() {
     super.connectedCallback();
@@ -236,40 +307,46 @@ export class SettingsPage extends LitElement {
 
   private async loadData() {
     this.loading = true;
-    this.error = null;
-
     try {
-      const start = performance.now();
-      const res = await fetch('/health');
-      const elapsed = Math.round(performance.now() - start);
-
-      if (!res.ok) throw new Error('Health check failed');
-      this.health = await res.json();
-      this.latency = elapsed;
-    } catch (err: any) {
-      this.error = 'Server not responding';
-      showError('Failed to fetch server status');
+      this.servers = await listServers();
+      this.audit = await getAuditLog(50);
+    } catch {
+      // non-critical
     }
 
+    // Get server info from health endpoint
     try {
-      const servers = await listServers();
-      this.clientCount = servers.length;
+      const res = await fetch('/health');
+      const data = await res.json();
+      this.nodeVersion = data.nodeVersion || '';
+      this.environment = data.environment || 'development';
     } catch {
-      this.clientCount = null;
+      // non-critical
     }
 
     this.loading = false;
   }
 
-  private handleRefresh() {
-    this.loadData();
-    showSuccess('Status refreshed');
+  private async handleCheckHealth() {
+    this.checking = true;
+    const results = new Map<string, HealthResult>();
+
+    for (const server of this.servers) {
+      try {
+        const result = await checkServerHealth(server.name);
+        results.set(server.name, result);
+      } catch {
+        results.set(server.name, { name: server.name, ok: false, status: 0, latency: 0, error: 'Connection failed' });
+      }
+    }
+
+    this.health = results;
+    this.checking = false;
   }
 
-  private renderStatusDot(ok: boolean | null) {
-    if (ok === null) return html`<span class="status-dot pending"></span>`;
-    if (ok) return html`<span class="status-dot"></span>`;
-    return html`<span class="status-dot error"></span>`;
+  private formatTimestamp(ts: string): string {
+    const d = new Date(ts);
+    return d.toLocaleTimeString();
   }
 
   render() {
@@ -277,129 +354,94 @@ export class SettingsPage extends LitElement {
       return html`
         <div class="loading">
           <div class="spinner"></div>
-          <span>Loading settings…</span>
+          <span>Loading…</span>
         </div>
       `;
     }
 
     return html`
       <div class="page-header">
-        <a href="#/clients" class="back-link">← Clients</a>
+        <a href="#/" class="back-link">← Servers</a>
         <h1>Settings</h1>
-        <button class="btn-refresh" @click=${this.handleRefresh}>
-          🔄 Refresh
-        </button>
       </div>
 
-      ${this.error ? html`
-        <div class="card" style="border-left: 4px solid var(--color-danger, #dc3545);">
-          <h2 style="color: var(--color-danger);">⚠️ Server Unavailable</h2>
-          <p style="margin: 0; color: var(--color-text-secondary);">
-            ${this.error}. Check that the server is running on port 3001.
-          </p>
-        </div>
-      ` : ''}
-
-      ${this.health ? html`
-        <div class="card">
-          <h2>Connection</h2>
-          <div class="row">
-            <span class="label">Admin API</span>
-            <span class="value mono">
-              <span class="status-indicator">
-                ${this.renderStatusDot(true)}
-                ${this.health.hydraAdmin}
-              </span>
-            </span>
-          </div>
-          <div class="row">
-            <span class="label">Status</span>
-            <span class="value">
-              <span class="status-indicator">
-                ${this.renderStatusDot(true)}
-                Connected
-              </span>
-            </span>
-          </div>
-          <div class="row">
-            <span class="label">Latency</span>
-            <span class="value">${this.latency !== null ? `${this.latency}ms` : '—'}</span>
-          </div>
-          <div class="row">
-            <span class="label">Last Check</span>
-            <span class="value">${new Date(this.health.timestamp).toLocaleString()}</span>
-          </div>
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2 style="margin: 0;">Hydra Servers</h2>
+          <button class="btn-check" @click=${this.handleCheckHealth} ?disabled=${this.checking}>
+            ${this.checking ? '⏳ Checking…' : '🏥 Check Health'}
+          </button>
         </div>
 
-        <div class="card">
-          <h2>Hydra</h2>
-          <div class="row">
-            <span class="label">Registered Clients</span>
-            <span class="value">${this.clientCount !== null ? this.clientCount : '—'}</span>
-          </div>
-          <div class="row">
-            <span class="label">Environment</span>
-            <span class="value">
-              <span class="badge ${this.health.environment === 'production' ? 'badge-prod' : 'badge-dev'}">
-                ${this.health.environment}
-              </span>
-            </span>
-          </div>
-        </div>
+        ${this.servers.map((s) => {
+          const h = this.health.get(s.name);
+          const badge = h
+            ? (h.ok
+              ? html`<span class="health-badge ok">✅ ${h.latency}ms</span>`
+              : html`<span class="health-badge fail">❌ ${h.error || h.status}</span>`)
+            : html`<span class="health-badge pending">—</span>`;
 
-        <div class="card">
-          <h2>Server</h2>
-          <div class="row">
-            <span class="label">Node.js</span>
-            <span class="value mono">${this.health.nodeVersion}</span>
-          </div>
-          <div class="row">
-            <span class="label">UI Version</span>
-            <span class="value mono">${this.health.version}</span>
-          </div>
-        </div>
-      ` : ''}
+          return html`
+            <div class="server-row">
+              <span class="env-dot ${s.environment}"></span>
+              <div class="server-info">
+                <div class="server-label">${s.label}</div>
+                <div class="server-url" title=${s.url}>${s.url}</div>
+              </div>
+              ${badge}
+            </div>
+          `;
+        })}
+      </div>
 
       <div class="card">
-        <h2>Quick Links</h2>
-        <div class="links-grid">
-          <a
-            class="link-card"
-            href="https://www.ory.sh/docs/hydra"
-            target="_blank"
-            rel="noopener"
-          >
-            <div class="link-label">📚 Hydra Docs</div>
-            <div class="link-url">ory.sh/docs/hydra</div>
-          </a>
-          <a
-            class="link-card"
-            href="https://www.ory.sh/docs/hydra/sdk/api"
-            target="_blank"
-            rel="noopener"
-          >
-            <div class="link-label">📖 API Reference</div>
-            <div class="link-url">ory.sh/docs/hydra/sdk/api</div>
-          </a>
-          <a
-            class="link-card"
-            href="https://github.com/ory/hydra"
-            target="_blank"
-            rel="noopener"
-          >
-            <div class="link-label">🐙 GitHub</div>
-            <div class="link-url">github.com/ory/hydra</div>
-          </a>
-          <a
-            class="link-card"
-            href="https://www.ory.sh/docs/hydra/self-hosted/configuration"
-            target="_blank"
-            rel="noopener"
-          >
-            <div class="link-label">⚙️ Configuration</div>
-            <div class="link-url">ory.sh/docs/hydra/self-hosted</div>
-          </a>
+        <h2>Server</h2>
+        <div class="info-row">
+          <span class="label">Node.js</span>
+          <span class="value mono">${this.nodeVersion || '—'}</span>
         </div>
+        <div class="info-row">
+          <span class="label">Environment</span>
+          <span class="value">
+            <span class="badge ${this.environment === 'production' ? 'badge-prod' : 'badge-dev'}">
+              ${this.environment}
+            </span>
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="label">Configured Servers</span>
+          <span class="value">${this.servers.length}</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recent Activity</h2>
+        ${this.audit.length === 0
+          ? html`<div class="empty-audit">No activity recorded yet.</div>`
+          : html`
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Server</th>
+                  <th>Method</th>
+                  <th>Path</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${this.audit.map((e) => html`
+                  <tr>
+                    <td>${this.formatTimestamp(e.timestamp)}</td>
+                    <td>${e.server}</td>
+                    <td><span class="method ${e.method}">${e.method}</span></td>
+                    <td class="path" title=${e.path}>${e.path}</td>
+                    <td class=${e.status < 400 ? 'status-ok' : 'status-err'}>${e.status}</td>
+                  </tr>
+                `)}
+              </tbody>
+            </table>
+          `}
       </div>
     `;
   }
