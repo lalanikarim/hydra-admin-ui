@@ -46,13 +46,13 @@ spec:
             - name: ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "hydra-admin.fullname" . }}-auth
-                  key: admin-token
+                  name: {{ .Values.auth.secretName | default (printf "%s-auth" (include "hydra-admin.fullname" .)) }}
+                  key: {{ .Values.auth.tokenKey | default "admin-token" }}
             - name: ADMIN_TOTP_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "hydra-admin.fullname" . }}-auth
-                  key: totp-secret
+                  name: {{ .Values.auth.secretName | default (printf "%s-auth" (include "hydra-admin.fullname" .)) }}
+                  key: {{ .Values.auth.totpKey | default "totp-secret" }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}

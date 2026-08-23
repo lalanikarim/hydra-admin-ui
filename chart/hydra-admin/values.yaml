@@ -23,11 +23,22 @@ hydra:
 # ─── Authentication ─────────────────────────────────────────────────────────
 
 auth:
-  # Set these via --set or a sealed secret, NOT in values.yaml
-  # adminToken: "change-me"
-  # totpSecret: "change-me"
+  # Set to false if using External Secrets Operator, Sealed Secrets, or a
+  # pre-created Secret in the namespace.
+  createSecret: true
+
+  # When createSecret=true, these are required:
   adminToken: ""
   totpSecret: ""
+
+  # When createSecret=false, point to an existing Secret:
+  # secretName: "my-external-secret"
+  # tokenKey: "admin-token"
+  # totpKey: "totp-secret"
+  secretName: ""
+  tokenKey: ""
+  totpKey: ""
+
   sessionHours: "8"
 
 # ─── Service ────────────────────────────────────────────────────────────────
