@@ -1,7 +1,27 @@
-node_modules
-dist
+# VCS
 .git
-*.md
+.gitignore
+
+# Dependencies (rebuilt in container)
+node_modules
+server/node_modules
+
+# Build output (rebuilt in container)
+dist
+server/dist
+
+# Local dev
+server/.env
 .env
-.env.*
+*.log
+
+# Artifacts / docs
+.artifacts
+contrib
+k8s
+Dockerfile
+.dockerignore
+*.md
+
+# OS
 .DS_Store
