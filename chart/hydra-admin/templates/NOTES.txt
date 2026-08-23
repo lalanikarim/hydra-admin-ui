@@ -1,0 +1,23 @@
+Hydra Admin UI has been deployed!
+
+{{- if .Values.ingress.enabled }}
+
+Access the admin UI at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+
+Port-forward to access:
+  kubectl port-forward svc/{{ include "hydra-admin.fullname" . }} 3001:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+Then open: http://localhost:3001
+{{- end }}
+
+Login credentials:
+  Admin Token: (set via auth.adminToken)
+  2FA Code:    (from your authenticator app)
+
+Hydra Admin API: {{ .Values.hydra.adminURL }}
+Session TTL:     {{ .Values.auth.sessionHours }}h
+Replicas:        {{ .Values.replicaCount }}

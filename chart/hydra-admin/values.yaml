@@ -1,0 +1,121 @@
+# ─── Image ──────────────────────────────────────────────────────────────────
+
+image:
+  repository: hydra-admin
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# ─── Deployment ─────────────────────────────────────────────────────────────
+
+replicaCount: 2
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ─── Hydra Connection ───────────────────────────────────────────────────────
+
+hydra:
+  # K8s service URL for Hydra admin API
+  adminURL: "http://hydra.ory.svc.cluster.local:4445"
+
+# ─── Authentication ─────────────────────────────────────────────────────────
+
+auth:
+  # Set these via --set or a sealed secret, NOT in values.yaml
+  # adminToken: "change-me"
+  # totpSecret: "change-me"
+  adminToken: ""
+  totpSecret: ""
+  sessionHours: "8"
+
+# ─── Service ────────────────────────────────────────────────────────────────
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3001
+
+# ─── Ingress ────────────────────────────────────────────────────────────────
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  # annotations:
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  #   cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: hydra-admin.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    # - secretName: hydra-admin-tls
+    #   hosts:
+    #     - hydra-admin.example.com
+
+# ─── Network Policy ─────────────────────────────────────────────────────────
+
+networkPolicy:
+  enabled: true
+  # Restrict ingress to specific namespaces (e.g., ingress-nginx)
+  allowNamespaces:
+    - ingress-nginx
+  # Allow specific pod labels
+  allowPodSelector: {}
+  # allowPodSelector:
+  #   app.kubernetes.io/name: my-frontend
+
+# ─── Resources ──────────────────────────────────────────────────────────────
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# ─── Probes ─────────────────────────────────────────────────────────────────
+
+probes:
+  liveness:
+    path: /health
+    port: 3001
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    path: /health
+    port: 3001
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# ─── Pod Settings ───────────────────────────────────────────────────────────
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# ─── Scheduling ─────────────────────────────────────────────────────────────
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ─── Labels ─────────────────────────────────────────────────────────────────
+
+extraLabels: {}

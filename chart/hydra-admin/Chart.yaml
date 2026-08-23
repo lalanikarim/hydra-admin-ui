@@ -1,0 +1,13 @@
+apiVersion: v2
+name: hydra-admin
+description: Ory Hydra Admin UI — OAuth 2.0 client management with TOTP auth
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - hydra
+  - oauth2
+  - oidc
+  - admin
+maintainers:
+  - name: Karim Lalani
