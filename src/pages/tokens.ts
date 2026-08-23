@@ -3,6 +3,13 @@ import { customElement, state } from 'lit/decorators.js';
 import { introspectToken } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
 
+function getServer(): string | null {
+  const hash = window.location.hash;
+  const queryIdx = hash.indexOf('?');
+  if (queryIdx === -1) return null;
+  return new URLSearchParams(hash.slice(queryIdx + 1)).get('server');
+}
+
 interface IntrospectionResult {
   active: boolean;
   scope?: string;
@@ -250,10 +257,23 @@ export class TokensPage extends LitElement {
   `;
 
   @state()
+  private server = '';
+
+  @state()
   private token = '';
 
   @state()
   private loading = false;
+
+  connectedCallback() {
+    super.connectedCallback();
+    const server = getServer();
+    if (!server) {
+      window.location.hash = '#/';
+      return;
+    }
+    this.server = server;
+  }
 
   @state()
   private result: IntrospectionResult | null = null;
@@ -273,7 +293,7 @@ export class TokensPage extends LitElement {
     this.result = null;
 
     try {
-      const data = await introspectToken(this.token.trim());
+      const data = await introspectToken(this.server, this.token.trim());
       this.result = data as IntrospectionResult;
       // Clear token after successful introspection (don't retain secrets)
       this.token = '';
@@ -314,7 +334,7 @@ export class TokensPage extends LitElement {
   render() {
     return html`
       <div class="page-header">
-        <a href="#/clients" class="back-link">← Clients</a>
+        <a href="#/clients?server=${this.server}" class="back-link">← Clients</a>
         <h1>Tokens</h1>
       </div>
 

@@ -1,7 +1,14 @@
 import { LitElement, html, css } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { createClient, type HydraClient } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
+
+function getServer(): string | null {
+  const hash = window.location.hash;
+  const queryIdx = hash.indexOf('?');
+  if (queryIdx === -1) return null;
+  return new URLSearchParams(hash.slice(queryIdx + 1)).get('server');
+}
 
 @customElement('page-client-new')
 export class ClientNewPage extends LitElement {
@@ -39,26 +46,39 @@ export class ClientNewPage extends LitElement {
     }
   `;
 
+  @state()
+  private server = '';
+
+  connectedCallback() {
+    super.connectedCallback();
+    const server = getServer();
+    if (!server) {
+      window.location.hash = '#/';
+      return;
+    }
+    this.server = server;
+  }
+
   private async handleSubmit(e: CustomEvent) {
     const data = e.detail.data as Omit<HydraClient, 'id' | 'secret'>;
 
     try {
-      const client = await createClient(data);
+      const client = await createClient(this.server, data);
       showSuccess(`Client "${client.name}" created successfully`);
-      window.location.hash = `#/clients/${client.id}`;
+      window.location.hash = `#/clients/${client.id}?server=${this.server}`;
     } catch (err: any) {
       showError(err?.message || 'Failed to create client');
     }
   }
 
   private handleCancel() {
-    window.location.hash = '#/clients';
+    window.location.hash = `#/clients?server=${this.server}`;
   }
 
   render() {
     return html`
       <div class="page-header">
-        <a href="#/clients" class="back-link">← Back</a>
+        <a href="#/clients?server=${this.server}" class="back-link">← Back</a>
         <h1>New Client</h1>
       </div>
       <hydra-client-form

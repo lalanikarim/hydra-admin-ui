@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { listClients } from '../api/hydra.js';
+import { listServers } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
 
 interface HealthInfo {
@@ -252,8 +252,8 @@ export class SettingsPage extends LitElement {
     }
 
     try {
-      const clients = await listClients();
-      this.clientCount = clients.length;
+      const servers = await listServers();
+      this.clientCount = servers.length;
     } catch {
       this.clientCount = null;
     }

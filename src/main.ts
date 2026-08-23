@@ -17,6 +17,7 @@ import './components/layout/app-layout.js';
 import './components/clients/client-table.js';
 import './components/clients/client-form.js';
 import './components/clients/client-detail.js';
+import './pages/server-picker.js';
 import './pages/home.js';
 import './pages/client-list.js';
 import './pages/client-new.js';

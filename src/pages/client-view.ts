@@ -4,6 +4,13 @@ import { getClient, deleteClient, rotateClientSecret, setClientSecret, type Hydr
 import { showSuccess, showError } from '../components/common/toast.js';
 import { showConfirm } from '../components/common/confirm.js';
 
+function getServer(): string | null {
+  const hash = window.location.hash;
+  const queryIdx = hash.indexOf('?');
+  if (queryIdx === -1) return null;
+  return new URLSearchParams(hash.slice(queryIdx + 1)).get('server');
+}
+
 @customElement('page-client-view')
 export class ClientViewPage extends LitElement {
   static styles = css`
@@ -182,6 +189,9 @@ export class ClientViewPage extends LitElement {
   params: Record<string, string> = {};
 
   @state()
+  private server = '';
+
+  @state()
   private showSecretModal = false;
 
   @state()
@@ -198,18 +208,30 @@ export class ClientViewPage extends LitElement {
 
   updated(changed: PropertyValues) {
     super.updated(changed);
-    if (changed.has('params') && this.params?.id) {
-      this.loadClient();
+    if (changed.has('params') && this.params?.id && !this.server) {
+      this.server = getServer() || '';
+      if (this.server) this.loadClient();
     }
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    const server = getServer();
+    if (!server) {
+      window.location.hash = '#/';
+      return;
+    }
+    this.server = server;
+    if (this.params?.id) this.loadClient();
+  }
+
   private async loadClient() {
-    if (!this.params.id) return;
+    if (!this.params.id || !this.server) return;
 
     this.loading = true;
     this.error = null;
     try {
-      this.client = await getClient(this.params.id);
+      this.client = await getClient(this.server, this.params.id);
     } catch (err: any) {
       this.error = err?.message || 'Failed to load client';
       showError(this.error || 'Unknown error');
@@ -233,7 +255,7 @@ export class ClientViewPage extends LitElement {
 
     try {
       if (this.client.id) {
-        await deleteClient(this.client.id);
+        await deleteClient(this.server, this.client.id);
         showSuccess('Client deleted successfully');
         window.location.hash = '#/clients';
       }
@@ -257,7 +279,7 @@ export class ClientViewPage extends LitElement {
 
     this.secretLoading = true;
     try {
-      const secret = await rotateClientSecret(this.client.id);
+      const secret = await rotateClientSecret(this.server, this.client.id);
       this.newSecret = secret;
       this.showSecretModal = true;
       showSuccess('Secret rotated successfully');
@@ -297,7 +319,7 @@ export class ClientViewPage extends LitElement {
 
     this.secretLoading = true;
     try {
-      await setClientSecret(this.client.id, this.manualSecret.trim());
+      await setClientSecret(this.server, this.client.id, this.manualSecret.trim());
       this.newSecret = this.manualSecret.trim();
       this.showSecretModal = true;
       this.showManualInput = false;
@@ -336,7 +358,7 @@ export class ClientViewPage extends LitElement {
         <h1>${this.client.name}</h1>
         <div class="page-actions">
           ${this.client.id
-            ? html`<a href="#/clients/${this.client.id}/edit" class="btn btn-edit">
+            ? html`<a href="#/clients/${this.client.id}/edit?server=${this.server}" class="btn btn-edit">
                 Edit
               </a>`
             : ''}

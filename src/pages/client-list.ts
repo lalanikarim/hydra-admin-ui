@@ -4,6 +4,13 @@ import { listClients, deleteClient, type HydraClient } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
 import { showConfirm } from '../components/common/confirm.js';
 
+function getServer(): string | null {
+  const hash = window.location.hash;
+  const queryIdx = hash.indexOf('?');
+  if (queryIdx === -1) return null;
+  return new URLSearchParams(hash.slice(queryIdx + 1)).get('server');
+}
+
 @customElement('page-client-list')
 export class ClientListPage extends LitElement {
   static styles = css`
@@ -15,11 +22,40 @@ export class ClientListPage extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 24px;
+      margin-bottom: var(--spacing-lg, 24px);
     }
 
     .page-header h1 {
       margin: 0;
+    }
+
+    .server-tag {
+      font-size: 0.8125rem;
+      color: var(--color-text-secondary, #6c757d);
+      background: var(--color-bg-secondary, #f8f9fa);
+      padding: 3px 10px;
+      border-radius: 9999px;
+      margin-left: 12px;
+      vertical-align: middle;
+    }
+
+    .btn-new {
+      padding: 8px 16px;
+      background: var(--color-primary, #0d6efd);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md, 8px);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: inherit;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn-new:hover {
+      background: var(--color-primary-hover, #0b5ed7);
+      text-decoration: none;
     }
 
     .loading {
@@ -65,16 +101,26 @@ export class ClientListPage extends LitElement {
   @state()
   private error: string | null = null;
 
+  @state()
+  private server = '';
+
   async connectedCallback() {
     super.connectedCallback();
+    const server = getServer();
+    if (!server) {
+      window.location.hash = '#/';
+      return;
+    }
+    this.server = server;
     await this.loadClients();
   }
 
   private async loadClients() {
+    if (!this.server) return;
     this.loading = true;
     this.error = null;
     try {
-      this.clients = await listClients();
+      this.clients = await listClients(this.server);
     } catch (err: any) {
       this.error = err?.message || 'Failed to load clients';
       showError(this.error || 'Unknown error');
@@ -95,7 +141,7 @@ export class ClientListPage extends LitElement {
     if (!confirmed) return;
 
     try {
-      await deleteClient(id);
+      await deleteClient(this.server, id);
       showSuccess('Client deleted successfully');
       await this.loadClients();
     } catch (err: any) {
@@ -125,11 +171,9 @@ export class ClientListPage extends LitElement {
 
     return html`
       <div class="page-header">
-        <h1>Clients</h1>
-        <a href="#/clients/new">
-          <button style="padding: 8px 16px; background: var(--color-primary, #0d6efd); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 500;">
-            + New Client
-          </button>
+        <h1>Clients <span class="server-tag">${this.server}</span></h1>
+        <a class="btn-new" href="#/clients/new?server=${this.server}">
+          + New Client
         </a>
       </div>
       <hydra-client-table

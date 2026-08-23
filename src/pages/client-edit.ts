@@ -3,6 +3,13 @@ import { customElement, state, property } from 'lit/decorators.js';
 import { getClient, updateClient, type HydraClient } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
 
+function getServer(): string | null {
+  const hash = window.location.hash;
+  const queryIdx = hash.indexOf('?');
+  if (queryIdx === -1) return null;
+  return new URLSearchParams(hash.slice(queryIdx + 1)).get('server');
+}
+
 @customElement('page-client-edit')
 export class ClientEditPage extends LitElement {
   static styles = css`
@@ -82,20 +89,35 @@ export class ClientEditPage extends LitElement {
   @property({ type: Object, attribute: false })
   params: Record<string, string> = {};
 
+  @state()
+  private server = '';
+
   updated(changed: PropertyValues) {
     super.updated(changed);
-    if (changed.has('params') && this.params?.id) {
-      this.loadClient();
+    if (changed.has('params') && this.params?.id && !this.server) {
+      this.server = getServer() || '';
+      if (this.server) this.loadClient();
     }
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    const server = getServer();
+    if (!server) {
+      window.location.hash = '#/';
+      return;
+    }
+    this.server = server;
+    if (this.params?.id) this.loadClient();
+  }
+
   private async loadClient() {
-    if (!this.params.id) return;
+    if (!this.params.id || !this.server) return;
 
     this.loading = true;
     this.error = null;
     try {
-      this.client = await getClient(this.params.id);
+      this.client = await getClient(this.server, this.params.id);
     } catch (err: any) {
       this.error = err?.message || 'Failed to load client';
       showError(this.error || 'Unknown error');
@@ -108,16 +130,16 @@ export class ClientEditPage extends LitElement {
     const data = e.detail.data as Omit<HydraClient, 'id' | 'secret'>;
 
     try {
-      await updateClient(this.params.id, data);
+      await updateClient(this.server, this.params.id, data);
       showSuccess(`Client "${data.name}" updated successfully`);
-      window.location.hash = `#/clients/${this.params.id}`;
+      window.location.hash = `#/clients/${this.params.id}?server=${this.server}`;
     } catch (err: any) {
       showError(err?.message || 'Failed to update client');
     }
   }
 
   private handleCancel() {
-    window.location.hash = `#/clients/${this.params.id || ''}`;
+    window.location.hash = `#/clients/${this.params.id || ''}?server=${this.server}`;
   }
 
   render() {
@@ -142,7 +164,7 @@ export class ClientEditPage extends LitElement {
 
     return html`
       <div class="page-header">
-        <a href="#/clients/${this.client.id}" class="back-link">← Back</a>
+        <a href="#/clients/${this.client.id}?server=${this.server}" class="back-link">← Back</a>
         <h1>Edit Client: ${this.client.name}</h1>
       </div>
       <hydra-client-form

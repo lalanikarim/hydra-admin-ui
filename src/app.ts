@@ -154,7 +154,7 @@ export class AppRoot extends LitElement {
 
     const matchRoute = (path: string) => {
       const routes: Array<{ pattern: RegExp; name: string; hasParams: boolean }> = [
-        { pattern: /^\/*$/, name: 'page-home', hasParams: false },
+        { pattern: /^\/*$/, name: 'page-server-picker', hasParams: false },
         { pattern: /^\/clients\/*$/, name: 'page-client-list', hasParams: false },
         { pattern: /^\/clients\/new\/*$/, name: 'page-client-new', hasParams: false },
         { pattern: /^\/clients\/([^/]+)\/*$/, name: 'page-client-view', hasParams: true },
@@ -177,10 +177,24 @@ export class AppRoot extends LitElement {
       return null;
     };
 
+    // Parse ?server= from hash
+    const getServerParam = (hash: string): string | null => {
+      const queryIdx = hash.indexOf('?');
+      if (queryIdx === -1) return null;
+      const params = new URLSearchParams(hash.slice(queryIdx + 1));
+      return params.get('server');
+    };
+
     const navigate = async (hash: string) => {
       const cleaned = hash.startsWith('#') ? hash.slice(1) : hash;
-      const path = cleaned || '/';
+      const path = cleaned.split('?')[0] || '/';
       this.currentPath = path;
+
+      // Server param (for pages that need it)
+      const serverParam = getServerParam(hash);
+      if (serverParam) {
+        (this as any)._currentServer = serverParam;
+      }
 
       // Auth guard: redirect to login if not authenticated (except on login page)
       if (path !== '/login') {

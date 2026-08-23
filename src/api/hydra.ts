@@ -103,25 +103,60 @@ async function fetchJson<T>(
   return response.json();
 }
 
+// ─── Server Types ──────────────────────────────────────────────────────────
+
+export interface HydraServer {
+  name: string;
+  label: string;
+  environment: string;
+  url: string;
+  description?: string;
+}
+
+export interface AuditEntry {
+  timestamp: string;
+  server: string;
+  method: string;
+  path: string;
+  status: number;
+  ip: string;
+}
+
+// ─── Server API ─────────────────────────────────────────────────────────────
+
+export async function listServers(): Promise<HydraServer[]> {
+  const data = await fetchJson<{ servers: HydraServer[] }>('/api/servers');
+  return data.servers;
+}
+
+export async function checkServerHealth(name: string): Promise<{ ok: boolean; status: number; latency: number; error?: string }> {
+  return fetchJson(`/api/servers/${encodeURIComponent(name)}/health`, { method: 'POST' });
+}
+
+export async function getAuditLog(limit = 50): Promise<AuditEntry[]> {
+  const data = await fetchJson<{ entries: AuditEntry[] }>(`/api/audit?limit=${limit}`);
+  return data.entries;
+}
+
 // ─── Clients ───────────────────────────────────────────────────────────────
 
-// Use relative paths - server will proxy to Hydra admin
-const API_BASE = '';
+// All client functions require a server name (routes to /h/{server}/...)
 
-export async function listClients(): Promise<HydraClient[]> {
-  const raw = await fetchJson<any[]>(`${API_BASE}/clients`);
+export async function listClients(server: string): Promise<HydraClient[]> {
+  const raw = await fetchJson<any[]>(`/h/${encodeURIComponent(server)}/clients`);
   return raw.map(normalizeHydraClient);
 }
 
-export async function getClient(id: string): Promise<HydraClient> {
-  const raw = await fetchJson<any>(`${API_BASE}/clients/${encodeURIComponent(id)}`);
+export async function getClient(server: string, id: string): Promise<HydraClient> {
+  const raw = await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`);
   return normalizeHydraClient(raw);
 }
 
 export async function createClient(
+  server: string,
   client: Omit<HydraClient, 'id' | 'secret'>
 ): Promise<HydraClient> {
-  const raw = await fetchJson<any>(`${API_BASE}/clients`, {
+  const raw = await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients`, {
     method: 'POST',
     body: JSON.stringify(denormalizeForHydra(client)),
   });
@@ -129,59 +164,58 @@ export async function createClient(
 }
 
 export async function updateClient(
+  server: string,
   id: string,
   client: Omit<HydraClient, 'id' | 'secret'>
 ): Promise<HydraClient> {
-  const raw = await fetchJson<any>(`${API_BASE}/clients/${encodeURIComponent(id)}`, {
+  const raw = await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(denormalizeForHydra(client)),
   });
   return normalizeHydraClient(raw);
 }
 
-export async function rotateClientSecret(id: string): Promise<string> {
-  // Fetch current client to preserve all fields (PUT is full-replace)
-  const current = await getClient(id);
+export async function rotateClientSecret(server: string, id: string): Promise<string> {
+  const current = await getClient(server, id);
   const newSecret = generateSecret();
-  
+
   const body = {
     ...denormalizeForHydra(current),
     secret: newSecret,
   };
-  
-  await fetchJson<any>(`${API_BASE}/clients/${encodeURIComponent(id)}`, {
+
+  await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });
   return newSecret;
 }
 
-export async function setClientSecret(id: string, secret: string): Promise<void> {
-  // Fetch current client to preserve all fields (PUT is full-replace)
-  const current = await getClient(id);
-  
+export async function setClientSecret(server: string, id: string, secret: string): Promise<void> {
+  const current = await getClient(server, id);
+
   const body = {
     ...denormalizeForHydra(current),
     secret,
   };
-  
-  await fetchJson<any>(`${API_BASE}/clients/${encodeURIComponent(id)}`, {
+
+  await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });
 }
 
-export async function deleteClient(id: string): Promise<void> {
-  await fetchJson<null>(`${API_BASE}/clients/${encodeURIComponent(id)}`, {
+export async function deleteClient(server: string, id: string): Promise<void> {
+  await fetchJson<null>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 }
 
 // ─── Token Introspection ───────────────────────────────────────────────────
 
-export async function introspectToken(token: string) {
+export async function introspectToken(server: string, token: string) {
   const params = new URLSearchParams({ token });
-  const response = await fetch(`${API_BASE}/oauth2/introspect?${params}`, {
+  const response = await fetch(`/h/${encodeURIComponent(server)}/oauth2/introspect?${params}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
