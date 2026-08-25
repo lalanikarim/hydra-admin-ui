@@ -1,6 +1,6 @@
 import { LitElement, html, css, type PropertyValues } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
-import { getClient, deleteClient, rotateClientSecret, setClientSecret, type HydraClient } from '../api/hydra.js';
+import { getClient, deleteClient, duplicateClient, rotateClientSecret, setClientSecret, type HydraClient } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
 import { showConfirm } from '../components/common/confirm.js';
 
@@ -206,6 +206,14 @@ export class ClientViewPage extends LitElement {
   @state()
   private secretLoading = false;
 
+  @state()
+  private duplicating = false;
+
+  // Set when the open secret modal belongs to a duplicated client —
+  // closing it navigates to the new client's page.
+  @state()
+  private duplicatedId = '';
+
   updated(changed: PropertyValues) {
     super.updated(changed);
     if (changed.has('params') && this.params?.id && !this.server) {
@@ -237,6 +245,30 @@ export class ClientViewPage extends LitElement {
       showError(this.error || 'Unknown error');
     } finally {
       this.loading = false;
+    }
+  }
+
+  private async handleDuplicate() {
+    if (!this.client?.id || this.duplicating) return;
+
+    this.duplicating = true;
+    try {
+      const copy = await duplicateClient(this.server, this.client);
+      if (copy.secret) {
+        // Show the one-time secret, then land on the new client page
+        this.newSecret = copy.secret;
+        this.duplicatedId = copy.id;
+        this.showSecretModal = true;
+        showSuccess(`Duplicated as "${copy.name}"`);
+      } else {
+        // Public client — no secret generated
+        showSuccess(`Duplicated as "${copy.name}"`);
+        window.location.hash = `#/clients/${copy.id}?server=${this.server}`;
+      }
+    } catch (err: any) {
+      showError(err?.message || 'Failed to duplicate client');
+    } finally {
+      this.duplicating = false;
     }
   }
 
@@ -363,6 +395,13 @@ export class ClientViewPage extends LitElement {
               </a>`
             : ''}
           <button
+            class="btn btn-edit"
+            @click=${this.handleDuplicate}
+            ?disabled=${this.duplicating}
+          >
+            ${this.duplicating ? '⏳ Duplicating…' : '📋 Duplicate'}
+          </button>
+          <button
             class="btn btn-rotate"
             @click=${this.handleRotateSecret}
             ?disabled=${this.secretLoading}
@@ -420,10 +459,15 @@ export class ClientViewPage extends LitElement {
       ${this.showSecretModal ? html`
         <hydra-secret-display
           .secret=${this.newSecret}
-          .clientId=${this.client.id || ''}
+          .clientId=${this.duplicatedId || this.client.id || ''}
           @close=${() => {
             this.showSecretModal = false;
+            const target = this.duplicatedId;
             this.newSecret = '';
+            this.duplicatedId = '';
+            if (target) {
+              window.location.hash = `#/clients/${target}?server=${this.server}`;
+            }
           }}
         ></hydra-secret-display>
       ` : ''}

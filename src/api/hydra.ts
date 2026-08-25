@@ -163,6 +163,23 @@ export async function createClient(
   return normalizeHydraClient(raw);
 }
 
+/**
+ * Duplicate a client within the same server (environment).
+ * Identity fields are stripped so Hydra auto-generates a fresh client ID
+ * and secret (returned once in the response). Everything else — including
+ * jwks — is copied verbatim.
+ */
+export async function duplicateClient(
+  server: string,
+  source: HydraClient
+): Promise<HydraClient> {
+  const { id, secret, name, created_at, updated_at, client_secret_expires_at, ...rest } = source;
+  return createClient(server, {
+    ...rest,
+    name: `${name} (copy)`,
+  });
+}
+
 export async function updateClient(
   server: string,
   id: string,
