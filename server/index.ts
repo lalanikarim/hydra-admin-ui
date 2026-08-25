@@ -252,7 +252,8 @@ app.post('/api/servers/:name/health', async (req: Request, res: Response) => {
         {
           hostname: url.hostname,
           port: url.port,
-          path: '/',
+          // /version is a stable admin API endpoint; GET / 404s on Hydra v1.x
+          path: '/version',
           method: 'GET',
           // Hydra admin API sits behind TLS termination (serve.tls.allow_termination_from)
           // and 502s requests that don't look TLS-terminated — same as the hydra CLI's

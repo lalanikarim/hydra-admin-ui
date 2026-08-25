@@ -133,6 +133,10 @@ export class AppRoot extends LitElement {
   @state()
   private currentPath = '/';
 
+  // Last server selected via ?server= — kept so sidebar nav stays in-context
+  @state()
+  private currentServer = '';
+
   connectedCallback() {
     super.connectedCallback();
     this.setupRouter();
@@ -193,7 +197,7 @@ export class AppRoot extends LitElement {
       // Server param (for pages that need it)
       const serverParam = getServerParam(hash);
       if (serverParam) {
-        (this as any)._currentServer = serverParam;
+        this.currentServer = serverParam;
       }
 
       // Auth guard: redirect to login if not authenticated (except on login page)
@@ -267,10 +271,10 @@ export class AppRoot extends LitElement {
             <a href="#/" class="nav-item ${this.isActive('/') ? 'active' : ''}">
               📊 Dashboard
             </a>
-            <a href="#/clients" class="nav-item ${this.isActive('/clients') ? 'active' : ''}">
+            <a href="#/clients${this.currentServer ? `?server=${this.currentServer}` : ''}" class="nav-item ${this.isActive('/clients') ? 'active' : ''}">
               🔑 Clients
             </a>
-            <a href="#/tokens" class="nav-item ${this.isActive('/tokens') ? 'active' : ''}">
+            <a href="#/tokens${this.currentServer ? `?server=${this.currentServer}` : ''}" class="nav-item ${this.isActive('/tokens') ? 'active' : ''}">
               🎫 Tokens
             </a>
             <a href="#/settings" class="nav-item ${this.isActive('/settings') ? 'active' : ''}">

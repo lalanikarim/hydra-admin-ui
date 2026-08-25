@@ -178,6 +178,7 @@ export class ClientListPage extends LitElement {
       </div>
       <hydra-client-table
         .clients=${this.clients}
+        .server=${this.server}
         .onDelete=${(id: string) => this.handleDelete(id)}
       ></hydra-client-table>
     `;

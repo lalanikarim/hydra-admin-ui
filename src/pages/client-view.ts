@@ -257,7 +257,7 @@ export class ClientViewPage extends LitElement {
       if (this.client.id) {
         await deleteClient(this.server, this.client.id);
         showSuccess('Client deleted successfully');
-        window.location.hash = '#/clients';
+        window.location.hash = `#/clients?server=${this.server}`;
       }
     } catch (err: any) {
       showError(err?.message || 'Failed to delete client');
@@ -347,14 +347,14 @@ export class ClientViewPage extends LitElement {
         <div class="not-found">
           <h2>Client Not Found</h2>
           <p>${this.error || 'The client you are looking for does not exist.'}</p>
-          <a href="#/clients">Back to Clients</a>
+          <a href="#/clients?server=${this.server}">Back to Clients</a>
         </div>
       `;
     }
 
     return html`
       <div class="page-header">
-        <a href="#/clients" class="back-link">← Back</a>
+        <a href="#/clients?server=${this.server}" class="back-link">← Back</a>
         <h1>${this.client.name}</h1>
         <div class="page-actions">
           ${this.client.id

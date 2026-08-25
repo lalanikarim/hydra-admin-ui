@@ -150,6 +150,7 @@ export class HydraClientTable extends LitElement {
   `;
 
   @property({ type: Array }) clients: HydraClient[] = [];
+  @property({ type: String }) server: string = '';
   @property({ type: Function }) onDelete: ((id: string) => void) | undefined;
   @property({ type: Function }) onView: ((id: string) => void) | undefined;
 
@@ -210,7 +211,7 @@ export class HydraClientTable extends LitElement {
               (client) => html`
                 <tr @click=${() => this.handleRowClick(client)}>
                   <td class="name-cell">
-                    <a href="#/clients/${client.id}">${client.name}</a>
+                    <a href="#/clients/${client.id}?server=${this.server}">${client.name}</a>
                   </td>
                   <td class="client-id">${client.id?.slice(0, 8)}...</td>
                   <td>
