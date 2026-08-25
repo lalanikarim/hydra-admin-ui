@@ -254,6 +254,10 @@ app.post('/api/servers/:name/health', async (req: Request, res: Response) => {
           port: url.port,
           path: '/',
           method: 'GET',
+          // Hydra admin API sits behind TLS termination (serve.tls.allow_termination_from)
+          // and 502s requests that don't look TLS-terminated — same as the hydra CLI's
+          // --fake-tls-termination flag.
+          headers: { 'x-forwarded-proto': 'https' },
           timeout: 5000,
         },
         (proxyRes) => {
@@ -359,6 +363,8 @@ app.all('/h/:serverName/clients*', async (req: Request, res: Response) => {
       headers: {
         ...req.headers,
         host: targetUrl.host,
+        // Hydra admin API requires a TLS-terminated appearance (see health check above).
+        'x-forwarded-proto': 'https',
         'content-length': body.length,
       },
       timeout: 30000,
@@ -433,6 +439,8 @@ app.all('/h/:serverName/oauth2*', async (req: Request, res: Response) => {
       headers: {
         ...req.headers,
         host: targetUrl.host,
+        // Hydra admin API requires a TLS-terminated appearance (see health check above).
+        'x-forwarded-proto': 'https',
         'content-length': body.length,
       },
       timeout: 30000,
