@@ -76,9 +76,10 @@ ingress:
 
 networkPolicy:
   enabled: true
-  # Restrict ingress to specific namespaces (e.g., ingress-nginx)
+  # Restrict ingress to specific namespaces (e.g., ingress-nginx, cloudflared)
   allowNamespaces:
     - ingress-nginx
+    - cloudflare
   # Allow specific pod labels
   allowPodSelector: {}
   # allowPodSelector:
