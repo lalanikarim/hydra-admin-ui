@@ -22,7 +22,7 @@ export interface ExportBundle {
 }
 
 /** Fields that must never appear in a diff or an export payload. */
-const HIDDEN_FIELDS = new Set(['secret', 'created_at', 'updated_at']);
+const HIDDEN_FIELDS = new Set(['secret', 'created_at', 'updated_at', 'client_secret_expires_at']);
 
 /** Strip volatile/secret fields so a client can be exported or re-created. */
 export function stripForExport(client: HydraClient): HydraClient {
