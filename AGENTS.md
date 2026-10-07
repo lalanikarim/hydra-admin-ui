@@ -71,6 +71,7 @@ podman build -t hydra-admin:latest .
 - Proxy uses raw `http.request` + `req.pipe()` — NOT `http-proxy-middleware`
 - Body collection via `collectBody()` helper (raw Buffer)
 - Auth: `requireAuth` middleware protects `/clients*`, `/oauth2*`, `/api/*`
+- Sessions: stateless HMAC-signed cookies (key derived from `ADMIN_TOKEN` via HKDF) — never reintroduce an in-memory session store; it breaks logins with >1 replica (pod A issues, pod B rejects)
 - Static files served from `dist/` (path resolution differs dev vs prod)
 - Log helper: `log()` only prints in non-production
 
