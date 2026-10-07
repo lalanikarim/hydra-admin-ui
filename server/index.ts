@@ -3,7 +3,7 @@
  *
  * - Serves the static frontend
  * - Proxies API requests to one or more Hydra admin instances
- * - Auth: shared ADMIN_TOKEN + TOTP 2FA
+ * - Auth: shared ADMIN_TOKEN + TOTP 2FA; stateless HMAC-signed session cookies
  * - Audit log: in-memory ring buffer
  *
  * Env vars:
@@ -47,43 +47,56 @@ if (!ADMIN_TOTP_SECRET) {
   process.exit(1);
 }
 
-// ─── Session Store ──────────────────────────────────────────────────────────
+// ─── Sessions: stateless HMAC-signed tokens ────────────────────────────────
+// Sessions must validate on ANY replica — an in-memory store broke logins
+// with >1 replica (login hits pod A, next request hits pod B → 401 loop).
+// Token format: base64url(JSON {iat, exp}).base64url(HMAC-SHA256(payload)).
+// The signing key derives from ADMIN_TOKEN via HKDF, so rotating the admin
+// token invalidates every outstanding session. Trade-off: logout cannot
+// revoke server-side before expiry — acceptable for this tool's threat model.
 
-interface Session {
-  createdAt: number;
-  expiresAt: number;
+const SESSION_KEY = Buffer.from(
+  crypto.hkdfSync(
+    'sha256',
+    Buffer.from(ADMIN_TOKEN),
+    Buffer.from('hydra-admin-session-v1'), // salt: domain-separates the derived key
+    Buffer.from('session-token'),
+    32
+  )
+);
+
+function signSessionPayload(payload: string): string {
+  return crypto.createHmac('sha256', SESSION_KEY).update(payload).digest('base64url');
 }
 
-const sessions = new Map<string, Session>();
-
 function createSession(): string {
-  const token = crypto.randomBytes(32).toString('hex');
   const now = Date.now();
-  sessions.set(token, { createdAt: now, expiresAt: now + SESSION_TTL_MS });
-  return token;
+  const payload = Buffer.from(JSON.stringify({ iat: now, exp: now + SESSION_TTL_MS })).toString('base64url');
+  return `${payload}.${signSessionPayload(payload)}`;
 }
 
 function validateSession(token: string | undefined): boolean {
-  if (!token) return false;
-  const session = sessions.get(token);
-  if (!session) return false;
-  if (Date.now() > session.expiresAt) {
-    sessions.delete(token);
+  if (!token || token.length > 512) return false;
+  const dot = token.lastIndexOf('.');
+  if (dot <= 0 || dot === token.length - 1) return false;
+  const payload = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+
+  // Constant-time comparison of the recomputed signature.
+  const expected = Buffer.from(signSessionPayload(payload));
+  const provided = Buffer.from(signature);
+  if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) return false;
+
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return typeof claims.exp === 'number' && Date.now() < claims.exp;
+  } catch {
     return false;
   }
-  return true;
 }
 
-function destroySession(token: string | undefined): void {
-  if (token) sessions.delete(token);
-}
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, session] of sessions) {
-    if (now > session.expiresAt) sessions.delete(token);
-  }
-}, 60 * 60 * 1000);
+// Logout clears the cookie client-side; the token itself expires on its own.
+function destroySession(_token: string | undefined): void {}
 
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 
