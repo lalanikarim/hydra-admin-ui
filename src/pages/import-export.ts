@@ -420,6 +420,20 @@ export class ImportPage extends LitElement {
       color: var(--color-text-secondary, #6c757d);
     }
 
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--color-border, #dee2e6);
+      border-top-color: var(--color-primary, #0d6efd);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .hidden-input {
       display: none;
     }
@@ -447,6 +461,11 @@ export class ImportPage extends LitElement {
 
   @state()
   private existing: HydraClient[] = [];
+
+  /** Upload UI stays disabled until the existing client list is loaded, otherwise
+   *  auto-matching could run against an empty list and mis-classify entries as new. */
+  @state()
+  private existingLoaded = false;
 
   @state()
   private parseError: string | null = null;
@@ -476,6 +495,8 @@ export class ImportPage extends LitElement {
       this.existing = await listClients(this.server);
     } catch (err: any) {
       showError(err?.message || 'Failed to load existing clients');
+    } finally {
+      this.existingLoaded = true;
     }
   }
 
@@ -626,6 +647,14 @@ export class ImportPage extends LitElement {
   // ─── Rendering ───────────────────────────────────────────────────────
 
   private renderUpload() {
+    if (!this.existingLoaded) {
+      return html`
+        <div class="loading">
+          <div class="spinner"></div>
+          <span>Loading existing clients…</span>
+        </div>
+      `;
+    }
     return html`
       <div
         class="dropzone ${this.dragOver ? 'dragover' : ''}"

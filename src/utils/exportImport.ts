@@ -166,12 +166,40 @@ export interface FieldDiff {
   incoming: unknown;
 }
 
-/** Treat undefined, null, empty string and empty array as "not set". */
+/** Treat undefined, null, empty string, empty array and empty object as "not set". */
 function isPresent(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === 'string' && value === '') return false;
   if (Array.isArray(value) && value.length === 0) return false;
+  if (typeof value === 'object' && Object.keys(value as object).length === 0) return false;
   return true;
+}
+
+/**
+ * Hydra fills these values server-side even when they were never set.
+ * If the incoming config omits such a field and the current value already
+ * equals the default, "removing" it would be a no-op — so we hide the row.
+ */
+const HYDRA_DEFAULTS: Record<string, unknown> = {
+  subject_type: 'public',
+  token_endpoint_auth_method: 'client_secret_basic',
+  access_token_type: 'bearer',
+  fetch_access_token_type: 'bearer',
+  userinfo_signed_response_alg: 'none',
+  skip_consent: false,
+  skip_interactions: false,
+  force_pkce: false,
+};
+
+function equalsHydraDefault(value: unknown): boolean {
+  for (const def of Object.values(HYDRA_DEFAULTS)) {
+    if (typeof value === 'string' && typeof def === 'string') {
+      if (value.toLowerCase() === def.toLowerCase()) return true;
+    } else if (value === def) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function stableStringify(value: unknown): string {
@@ -244,6 +272,9 @@ export function computeDiff(
     } else if (incHas) {
       status = 'add';
     } else {
+      // Omitting a field whose current value is just a Hydra default is a no-op.
+      // Never applied to user-defined metadata.* keys.
+      if (!key.startsWith('metadata.') && equalsHydraDefault(curVal)) continue;
       status = 'remove';
     }
     diffs.push({ key, label: fieldLabel(key), status, current: curVal, incoming: incVal });
