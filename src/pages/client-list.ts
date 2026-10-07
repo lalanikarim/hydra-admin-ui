@@ -3,6 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { listClients, deleteClient, type HydraClient } from '../api/hydra.js';
 import { showSuccess, showError } from '../components/common/toast.js';
 import { showConfirm } from '../components/common/confirm.js';
+import { buildExportBundle, downloadBundle } from '../utils/exportImport.js';
 
 function getServer(): string | null {
   const hash = window.location.hash;
@@ -90,6 +91,42 @@ export class ClientListPage extends LitElement {
       color: var(--color-danger, #dc3545);
       margin-bottom: 8px;
     }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm, 8px);
+    }
+
+    .btn-secondary {
+      padding: 8px 16px;
+      background: var(--color-surface, #fff);
+      color: var(--color-text, #212529);
+      border: 1.5px solid var(--color-border, #dee2e6);
+      border-radius: var(--radius-md, 8px);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: inherit;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--color-primary, #0d6efd);
+      color: var(--color-primary, #0d6efd);
+      text-decoration: none;
+    }
+
+    .btn-secondary:focus-visible {
+      outline: 2px solid var(--color-primary, #0d6efd);
+      outline-offset: 2px;
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   `;
 
   @state()
@@ -103,6 +140,33 @@ export class ClientListPage extends LitElement {
 
   @state()
   private server = '';
+
+  @state()
+  private selectedIds = new Set<string>();
+
+  private handleToggleSelect(id: string, checked: boolean) {
+    const next = new Set(this.selectedIds);
+    if (checked) next.add(id);
+    else next.delete(id);
+    this.selectedIds = next;
+  }
+
+  private handleToggleSelectAll(ids: string[], checked: boolean) {
+    this.selectedIds = checked ? new Set(ids) : new Set();
+  }
+
+  private exportClients(clients: HydraClient[]) {
+    if (clients.length === 0) {
+      showError('Nothing to export');
+      return;
+    }
+    const filename = downloadBundle(buildExportBundle(this.server, clients));
+    showSuccess(`Exported ${clients.length} client${clients.length === 1 ? '' : 's'} to ${filename}`);
+  }
+
+  private handleExportSelected() {
+    this.exportClients(this.clients.filter((c) => this.selectedIds.has(c.id)));
+  }
 
   async connectedCallback() {
     super.connectedCallback();
@@ -172,13 +236,34 @@ export class ClientListPage extends LitElement {
     return html`
       <div class="page-header">
         <h1>Clients <span class="server-tag">${this.server}</span></h1>
-        <a class="btn-new" href="#/clients/new?server=${this.server}">
-          + New Client
-        </a>
+        <div class="header-actions">
+          <button
+            class="btn-secondary"
+            ?disabled=${this.selectedIds.size === 0}
+            @click=${this.handleExportSelected}
+            title="Export the selected clients to a JSON file"
+          >
+            Export selected (${this.selectedIds.size})
+          </button>
+          <button
+            class="btn-secondary"
+            @click=${() => this.exportClients(this.clients)}
+            title="Export all clients on this server to a JSON file"
+          >
+            Export all
+          </button>
+          <a class="btn-secondary" href="#/import?server=${this.server}">Import</a>
+          <a class="btn-new" href="#/clients/new?server=${this.server}">
+            + New Client
+          </a>
+        </div>
       </div>
       <hydra-client-table
         .clients=${this.clients}
         .server=${this.server}
+        .selectedIds=${this.selectedIds}
+        .onToggleSelect=${(id: string, checked: boolean) => this.handleToggleSelect(id, checked)}
+        .onToggleSelectAll=${(ids: string[], checked: boolean) => this.handleToggleSelectAll(ids, checked)}
         .onDelete=${(id: string) => this.handleDelete(id)}
       ></hydra-client-table>
     `;

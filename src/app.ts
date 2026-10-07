@@ -163,6 +163,7 @@ export class AppRoot extends LitElement {
         { pattern: /^\/clients\/new\/*$/, name: 'page-client-new', hasParams: false },
         { pattern: /^\/clients\/([^/]+)\/*$/, name: 'page-client-view', hasParams: true },
         { pattern: /^\/clients\/([^/]+)\/edit\/*$/, name: 'page-client-edit', hasParams: true },
+        { pattern: /^\/import\/*$/, name: 'page-import', hasParams: false },
         { pattern: /^\/tokens\/*$/, name: 'page-tokens', hasParams: false },
         { pattern: /^\/settings\/*$/, name: 'page-settings', hasParams: false },
         { pattern: /^\/login\/*$/, name: 'page-login', hasParams: false },
@@ -273,6 +274,9 @@ export class AppRoot extends LitElement {
             </a>
             <a href="#/clients${this.currentServer ? `?server=${this.currentServer}` : ''}" class="nav-item ${this.isActive('/clients') ? 'active' : ''}">
               🔑 Clients
+            </a>
+            <a href="#/import${this.currentServer ? `?server=${this.currentServer}` : ''}" class="nav-item ${this.isActive('/import') ? 'active' : ''}">
+              📦 Import
             </a>
             <a href="#/tokens${this.currentServer ? `?server=${this.currentServer}` : ''}" class="nav-item ${this.isActive('/tokens') ? 'active' : ''}">
               🎫 Tokens

@@ -154,11 +154,17 @@ export async function getClient(server: string, id: string): Promise<HydraClient
 
 export async function createClient(
   server: string,
-  client: Omit<HydraClient, 'id' | 'secret'>
+  // Optional `id` preserves an exported client_id across servers; omit to auto-generate.
+  client: Omit<HydraClient, 'id' | 'secret'> & { id?: string }
 ): Promise<HydraClient> {
+  const { id, ...rest } = client;
+  const body = {
+    ...(id ? { client_id: id } : {}),
+    ...denormalizeForHydra(rest),
+  };
   const raw = await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients`, {
     method: 'POST',
-    body: JSON.stringify(denormalizeForHydra(client)),
+    body: JSON.stringify(body),
   });
   return normalizeHydraClient(raw);
 }

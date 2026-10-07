@@ -23,6 +23,7 @@ import './pages/client-list.js';
 import './pages/client-new.js';
 import './pages/client-edit.js';
 import './pages/client-view.js';
+import './pages/import-export.js';
 import './pages/tokens.js';
 import './pages/settings.js';
 import './pages/login.js';
