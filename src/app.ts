@@ -118,12 +118,37 @@ export class AppRoot extends LitElement {
       color: var(--color-primary, #0d6efd);
     }
 
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
       background: var(--color-success, #198754);
-      margin-left: auto;
+    }
+
+    .logout-btn {
+      padding: 6px 12px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--color-text-secondary, #6c757d);
+      background: transparent;
+      border: 1px solid var(--color-border, #dee2e6);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .logout-btn:hover {
+      color: var(--color-danger, #dc3545);
+      border-color: var(--color-danger, #dc3545);
+      background: var(--color-danger-light, #f8d7da);
     }
   `;
 
@@ -263,6 +288,20 @@ export class AppRoot extends LitElement {
     return this.currentPath === path || this.currentPath.startsWith(path + '/');
   }
 
+  private async handleLogout() {
+    try {
+      // Clears the session cookie server-side. Ignore errors — we redirect to
+      // login regardless, and the auth guard blocks any further API access.
+      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {
+      // best-effort; fall through to the redirect below
+    }
+    window.location.hash = '#/login';
+    // Full reload resets any in-memory state and re-runs the auth guard,
+    // mirroring the login flow.
+    window.location.reload();
+  }
+
   render() {
     return html`
       <div class="app-layout">
@@ -292,7 +331,17 @@ export class AppRoot extends LitElement {
               <span class="logo-icon">H</span>
               Hydra Admin
             </a>
-            <span class="status-dot" title="Connected to Hydra"></span>
+            <div class="header-actions">
+              <span class="status-dot" title="Connected to Hydra"></span>
+              <button
+                type="button"
+                class="logout-btn"
+                @click=${this.handleLogout}
+                title="Log out"
+              >
+                Log out
+              </button>
+            </div>
           </header>
           <main class="content">
             ${this.page ? html`${this.page}` : html`<div class="loading">Loading...</div>`}
