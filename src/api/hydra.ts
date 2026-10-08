@@ -202,9 +202,11 @@ export async function rotateClientSecret(server: string, id: string): Promise<st
   const current = await getClient(server, id);
   const newSecret = generateSecret();
 
+  // Hydra reads `client_secret` (not `secret`) on update; an absent/empty
+  // value keeps the existing secret, so the field name must be exact.
   const body = {
     ...denormalizeForHydra(current),
-    secret: newSecret,
+    client_secret: newSecret,
   };
 
   await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`, {
@@ -217,9 +219,11 @@ export async function rotateClientSecret(server: string, id: string): Promise<st
 export async function setClientSecret(server: string, id: string, secret: string): Promise<void> {
   const current = await getClient(server, id);
 
+  // Hydra reads `client_secret` (not `secret`) on update; an absent/empty
+  // value keeps the existing secret, so the field name must be exact.
   const body = {
     ...denormalizeForHydra(current),
-    secret,
+    client_secret: secret,
   };
 
   await fetchJson<any>(`/h/${encodeURIComponent(server)}/clients/${encodeURIComponent(id)}`, {
